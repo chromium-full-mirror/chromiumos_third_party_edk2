@@ -13,7 +13,8 @@ OBJECTS = DevicePath.o UefiDevicePathLib.o DevicePathFromText.o  DevicePathUtili
 
 include $(MAKEROOT)/Makefiles/app.makefile
 
-GCCVERSION = $(shell gcc -dumpversion | awk -F'.' '{print $$1}')
+ifneq ($(findstring gcc,$(BUILD_CC)),)
+GCCVERSION = $(shell $(BUILD_CC) -dumpversion | awk -F'.' '{print $$1}')
 ifneq ("$(GCCVERSION)", "5")
 ifneq ($(CXX), llvm)
 ifneq ($(DARWIN),Darwin)
@@ -22,6 +23,8 @@ BUILD_CFLAGS += -Wno-error=stringop-overflow
 endif
 endif
 endif
+endif
+
 
 LIBS = -lCommon
 ifeq ($(CYGWIN), CYGWIN)
