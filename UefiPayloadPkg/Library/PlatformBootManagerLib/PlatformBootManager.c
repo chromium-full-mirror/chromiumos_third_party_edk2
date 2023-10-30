@@ -312,25 +312,40 @@ PlatformBootManagerAfterConsole (
   EfiBootManagerRefreshAllBootOption ();
 
   //
+  // Process TPM PPI request
+  //
+  Status=TcgPhysicalPresenceLibProcessRequest (); // Check for TPM1.2 First
+  if (EFI_ERROR (Status)) {
+	  Tcg2PhysicalPresenceLibProcessRequest (NULL); //Check for TPM2.0
+  }
+
+  //
   // Register UEFI Shell
   //
   PlatformRegisterFvBootOption (&gUefiShellFileGuid, L"UEFI Shell", LOAD_OPTION_ACTIVE);
 
   if (FixedPcdGetBool (PcdBootManagerEscape)) {
-    Print (
-      L"\n"
-      L"    Esc or Down      to enter Boot Manager Menu.\n"
-      L"    ENTER            to boot directly.\n"
-      L"\n"
+    BootLogoUpdateProgress (
+      White,
+      Black,
+      L"Press ESC for Boot Options/Settings",
+      White,
+      0,
+      0
       );
   } else {
-    Print (
-      L"\n"
-      L"    F2 or Down      to enter Boot Manager Menu.\n"
-      L"    ENTER           to boot directly.\n"
-      L"\n"
+    BootLogoUpdateProgress (
+      White,
+      Black,
+      L"Press F2 or Down for Boot Options/Settings",
+      White,
+      0,
+      0
       );
   }
+
+  // invoke SMM handler to put BYT eMMC/SD devices into ACPI mode for OS
+  IoWrite8(0xb2, 0xcd);
 }
 
 /**
@@ -344,6 +359,10 @@ PlatformBootManagerWaitCallback (
   UINT16  TimeoutRemain
   )
 {
+  if (TimeoutRemain == 0) {
+    BootLogoClearProgress ();
+  }
+
   return;
 }
 

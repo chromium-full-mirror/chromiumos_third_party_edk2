@@ -1831,6 +1831,9 @@ EfiBootManagerBoot (
   UINTN                      FileSize;
   EFI_BOOT_LOGO_PROTOCOL     *BootLogo;
   EFI_EVENT                  LegacyBootEvent;
+  EFI_INPUT_KEY              Key;
+  UINTN                      Index;
+  UINT8                     *SecureBoot;
 
   if (BootOption == NULL) {
     return;
@@ -1971,6 +1974,41 @@ EfiBootManagerBoot (
       //
       BmReportLoadFailure (EFI_SW_DXE_BS_EC_BOOT_OPTION_LOAD_ERROR, Status);
       BootOption->Status = Status;
+
+      if (gST->ConOut != NULL) {
+        gST->ConOut->ClearScreen (gST->ConOut);
+
+        //
+        // When UEFI Secure Boot is enabled, unsigned modules won't load.
+        //
+        SecureBoot = NULL;
+        GetEfiGlobalVariable2 (EFI_SECURE_BOOT_MODE_NAME, (VOID**)&SecureBoot, NULL);
+        if ((SecureBoot != NULL) && (*SecureBoot == SECURE_BOOT_MODE_ENABLE)) {
+          AsciiPrint ("SecureBoot status: enabled\n\n");
+        } else {
+          AsciiPrint ("SecureBoot status: disabled\n\n");
+        }
+
+        if (SecureBoot != NULL) {
+          FreePool (SecureBoot);
+        }
+
+        AsciiPrint (
+            "Booting from '%s' failed; verify it contains a 64-bit UEFI OS.\n"
+            "\nPress any key to continue booting...\n",
+            BootOption->Description);
+      }
+      if (gST->ConIn != NULL) {
+        Status = gBS->WaitForEvent (1, &gST->ConIn->WaitForKey, &Index);
+        ASSERT_EFI_ERROR (Status);
+        ASSERT (Index == 0);
+        while (!EFI_ERROR (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key))) {}
+      }
+
+      if (gST->ConOut != NULL) {
+        gST->ConOut->ClearScreen (gST->ConOut);
+      }
+
       return;
     }
   }
@@ -2175,12 +2213,14 @@ BmEnumerateBootOptions (
   EFI_BLOCK_IO_PROTOCOL         *BlkIo;
   UINTN                         Removable;
   UINTN                         Index;
+  UINTN                         EmmcCount;
   CHAR16                        *Description;
 
   ASSERT (BootOptionCount != NULL);
 
   *BootOptionCount = 0;
   BootOptions      = NULL;
+  EmmcCount        = 0;
 
   //
   // Parse removable block io followed by fixed block io
@@ -2214,8 +2254,14 @@ BmEnumerateBootOptions (
       //
       // Skip the fixed block io then the removable block io
       //
-      if (BlkIo->Media->RemovableMedia == ((Removable == 0) ? FALSE : TRUE)) {
-        continue;
+      if (FixedPcdGetBool (PcdPrioritizeInternal)) {
+        if (BlkIo->Media->RemovableMedia == (Removable == 0)) {
+          continue;
+        }
+      } else {
+        if (BlkIo->Media->RemovableMedia == ((Removable == 0) ? FALSE : TRUE)) {
+          continue;
+        }
       }
 
       //
@@ -2228,6 +2274,17 @@ BmEnumerateBootOptions (
       }
 
       Description = BmGetBootDescription (Handles[Index]);
+
+      //
+      // Skip secondary entries for internal eMMC devices
+      //
+      if (StrCmp(Description, L"eMMC Device") == 0) {
+        EmmcCount++;
+        if (EmmcCount > 1) {
+          continue;
+        }
+      }
+
       BootOptions = ReallocatePool (
                       sizeof (EFI_BOOT_MANAGER_LOAD_OPTION) * (*BootOptionCount),
                       sizeof (EFI_BOOT_MANAGER_LOAD_OPTION) * (*BootOptionCount + 1),

@@ -39,11 +39,13 @@
   DEFINE SD_ENABLE                    = TRUE
   DEFINE PS2_MOUSE_ENABLE             = TRUE
   DEFINE CRYPTO_PROTOCOL_SUPPORT      = FALSE
+  DEFINE PRIORITIZE_INTERNAL          = FALSE
   DEFINE SD_MMC_TIMEOUT               = 1000000
   DEFINE USE_CBMEM_FOR_CONSOLE        = FALSE
-  DEFINE BOOTSPLASH_IMAGE             = FALSE
+  DEFINE BOOTSPLASH_IMAGE             = TRUE
   DEFINE NVME_ENABLE                  = TRUE
   DEFINE CAPSULE_SUPPORT              = FALSE
+  DEFINE FOLLOW_BGRT_SPEC             = FALSE
 
   #
   # NULL:    NullMemoryTestDxe
@@ -110,6 +112,7 @@
   #
   # EMU:      UEFI payload with EMU variable
   # SPI:      UEFI payload with SPI NV variable support
+  # SMMSTORE: UEFI payload with coreboot SMM NV variable support
   # NONE:     UEFI payload with no variable modules
   #
   DEFINE VARIABLE_SUPPORT      = EMU
@@ -133,6 +136,41 @@
   DEFINE CPU_TIMER_LIB_ENABLE  = TRUE
 
   DEFINE MULTIPLE_DEBUG_PORT_SUPPORT = FALSE
+
+  # Security options:
+  #
+  DEFINE SECURE_BOOT_ENABLE           = FALSE
+
+  #
+  # Network definition
+  #
+  DEFINE NETWORK_ISCSI_ENABLE           = FALSE
+  DEFINE NETWORK_PXE_BOOT               = FALSE
+  DEFINE NETWORK_ENABLE                 = FALSE
+  DEFINE NETWORK_TLS_ENABLE             = FALSE
+  DEFINE NETWORK_IP6_ENABLE             = FALSE
+  DEFINE NETWORK_IP4_ENABLE             = TRUE
+  DEFINE NETWORK_RTEK_PCI               = FALSE
+  DEFINE NETWORK_RTEK_USB               = FALSE
+  DEFINE NETWORK_ASIX_USB3              = FALSE
+  DEFINE NETWORK_ASIX_USB2              = FALSE
+
+!if $(NETWORK_PXE_BOOT) == TRUE
+  DEFINE NETWORK_SNP_ENABLE             = TRUE
+  DEFINE NETWORK_HTTP_BOOT_ENABLE       = FALSE
+!else
+  DEFINE NETWORK_SNP_ENABLE             = FALSE
+  DEFINE NETWORK_HTTP_BOOT_ENABLE       = TRUE
+  DEFINE NETWORK_ALLOW_HTTP_CONNECTIONS = TRUE
+!endif
+
+!include NetworkPkg/NetworkDefines.dsc.inc
+
+  # Security options:
+  #
+  DEFINE TPM_ENABLE                     = TRUE
+  DEFINE TPM2_ENABLE                    = TRUE
+  DEFINE TPM1_ENABLE                    = TRUE
 
 [BuildOptions]
   *_*_*_CC_FLAGS                 = -D DISABLE_NEW_DEPRECATED_INTERFACES
@@ -296,8 +334,10 @@
   DebugLib|MdeModulePkg/Library/PeiDxeDebugLibReportStatusCode/PeiDxeDebugLibReportStatusCode.inf
   LockBoxLib|MdeModulePkg/Library/LockBoxNullLib/LockBoxNullLib.inf
   FileExplorerLib|MdeModulePkg/Library/FileExplorerLib/FileExplorerLib.inf
-  AuthVariableLib|MdeModulePkg/Library/AuthVariableLibNull/AuthVariableLibNull.inf
 !if $(VARIABLE_SUPPORT) == "EMU"
+  TpmMeasurementLib|MdeModulePkg/Library/TpmMeasurementLibNull/TpmMeasurementLibNull.inf
+!elseif $(VARIABLE_SUPPORT) == "SMMSTORE"
+  SmmStoreLib|UefiPayloadPkg/Library/SmmStoreLib/SmmStoreLib.inf
   TpmMeasurementLib|MdeModulePkg/Library/TpmMeasurementLibNull/TpmMeasurementLibNull.inf
 !elseif $(VARIABLE_SUPPORT) == "SPI"
   PlatformSecureLib|SecurityPkg/Library/PlatformSecureLibNull/PlatformSecureLibNull.inf
@@ -305,6 +345,13 @@
   S3BootScriptLib|MdePkg/Library/BaseS3BootScriptLibNull/BaseS3BootScriptLibNull.inf
   MmUnblockMemoryLib|MdePkg/Library/MmUnblockMemoryLib/MmUnblockMemoryLibNull.inf
 !endif
+  ShellCEntryLib|ShellPkg/Library/UefiShellCEntryLib/UefiShellCEntryLib.inf
+
+!include NetworkPkg/NetworkLibs.dsc.inc
+!if $(NETWORK_TLS_ENABLE) == TRUE
+  TlsLib|CryptoPkg/Library/TlsLib/TlsLib.inf
+!endif
+
   VarCheckLib|MdeModulePkg/Library/VarCheckLib/VarCheckLib.inf
   VariablePolicyLib|MdeModulePkg/Library/VariablePolicyLib/VariablePolicyLib.inf
   VariablePolicyHelperLib|MdeModulePkg/Library/VariablePolicyHelperLib/VariablePolicyHelperLib.inf
@@ -316,6 +363,27 @@
 !if $(BOOTSPLASH_IMAGE)
   SafeIntLib|MdePkg/Library/BaseSafeIntLib/BaseSafeIntLib.inf
   BmpSupportLib|MdeModulePkg/Library/BaseBmpSupportLib/BaseBmpSupportLib.inf
+!endif
+
+[LibraryClasses.common]
+  BaseCryptLib|CryptoPkg/Library/BaseCryptLib/BaseCryptLib.inf
+
+!if $(TPM_ENABLE) == TRUE
+  Tpm12CommandLib|SecurityPkg/Library/Tpm12CommandLib/Tpm12CommandLib.inf
+  TcgPhysicalPresenceLib|UefiPayloadPkg/Library/TcgPhysicalPresenceLibUefiPayload/DxeTcgPhysicalPresenceLib.inf
+  TcgPpVendorLib|SecurityPkg/Library/TcgPpVendorLibNull/TcgPpVendorLibNull.inf
+  Tpm2CommandLib|SecurityPkg/Library/Tpm2CommandLib/Tpm2CommandLib.inf
+#  Tcg2PhysicalPresenceLib|OvmfPkg/Library/Tcg2PhysicalPresenceLibQemu/DxeTcg2PhysicalPresenceLib.inf
+  Tcg2PhysicalPresenceLib|UefiPayloadPkg/Library/Tcg2PhysicalPresencePlatformLibUefipayload/DxeTcg2PhysicalPresenceLib.inf
+  Tcg2PhysicalPresencePlatformLib|UefiPayloadPkg/Library/Tcg2PhysicalPresencePlatformLibUefipayload/DxeTcg2PhysicalPresencePlatformLib.inf
+  Tcg2PpVendorLib|SecurityPkg/Library/Tcg2PpVendorLibNull/Tcg2PpVendorLibNull.inf
+  TpmMeasurementLib|SecurityPkg/Library/DxeTpmMeasurementLib/DxeTpmMeasurementLib.inf
+  Tpm12DeviceLib|SecurityPkg/Library/Tpm12DeviceLibTcg/Tpm12DeviceLibTcg.inf
+  Tpm2DeviceLib|SecurityPkg/Library/Tpm2DeviceLibTcg2/Tpm2DeviceLibTcg2.inf
+!else
+  TpmMeasurementLib|MdeModulePkg/Library/TpmMeasurementLibNull/TpmMeasurementLibNull.inf
+  TcgPhysicalPresenceLib|UefiPayloadPkg/Library/TcgPhysicalPresenceLibNull/DxeTcgPhysicalPresenceLib.inf
+  Tcg2PhysicalPresenceLib|OvmfPkg/Library/Tcg2PhysicalPresenceLibNull/DxeTcg2PhysicalPresenceLib.inf
 !endif
 
 [LibraryClasses.common.SEC]
@@ -341,6 +409,25 @@
 !if $(PERFORMANCE_MEASUREMENT_ENABLE)
   PerformanceLib|MdeModulePkg/Library/DxeCorePerformanceLib/DxeCorePerformanceLib.inf
 !endif
+  OpensslLib|CryptoPkg/Library/OpensslLib/OpensslLibCrypto.inf
+  IntrinsicLib|CryptoPkg/Library/IntrinsicLib/IntrinsicLib.inf
+  RngLib|MdePkg/Library/BaseRngLibTimerLib/BaseRngLibTimerLib.inf
+
+!if $(SECURE_BOOT_ENABLE) == TRUE
+  AuthVariableLib|SecurityPkg/Library/AuthVariableLib/AuthVariableLib.inf
+  SecureBootVariableLib|SecurityPkg/Library/SecureBootVariableLib/SecureBootVariableLib.inf
+  SecureBootVariableProvisionLib|SecurityPkg/Library/SecureBootVariableProvisionLib/SecureBootVariableProvisionLib.inf
+  PlatformPKProtectionLib|SecurityPkg/Library/PlatformPKProtectionLibVarPolicy/PlatformPKProtectionLibVarPolicy.inf
+
+  # re-use the UserPhysicalPresent() dummy implementation from the ovmf tree
+  PlatformSecureLib|OvmfPkg/Library/PlatformSecureLib/PlatformSecureLib.inf
+!else
+  AuthVariableLib|MdeModulePkg/Library/AuthVariableLibNull/AuthVariableLibNull.inf
+!endif
+
+  BaseCryptLib|CryptoPkg/Library/BaseCryptLib/BaseCryptLib.inf
+  IntrinsicLib|CryptoPkg/Library/IntrinsicLib/IntrinsicLib.inf
+  OpensslLib|CryptoPkg/Library/OpensslLib/OpensslLib.inf
 
 [LibraryClasses.common.DXE_DRIVER]
   PcdLib|MdePkg/Library/DxePcdLib/DxePcdLib.inf
@@ -355,6 +442,31 @@
 !if $(PERFORMANCE_MEASUREMENT_ENABLE)
   PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
 !endif
+  OpensslLib|CryptoPkg/Library/OpensslLib/OpensslLibCrypto.inf
+  IntrinsicLib|CryptoPkg/Library/IntrinsicLib/IntrinsicLib.inf
+  RngLib|MdePkg/Library/BaseRngLibTimerLib/BaseRngLibTimerLib.inf
+
+!if $(SECURE_BOOT_ENABLE) == TRUE
+  AuthVariableLib|SecurityPkg/Library/AuthVariableLib/AuthVariableLib.inf
+  SecureBootVariableLib|SecurityPkg/Library/SecureBootVariableLib/SecureBootVariableLib.inf
+  SecureBootVariableProvisionLib|SecurityPkg/Library/SecureBootVariableProvisionLib/SecureBootVariableProvisionLib.inf
+  PlatformPKProtectionLib|SecurityPkg/Library/PlatformPKProtectionLibVarPolicy/PlatformPKProtectionLibVarPolicy.inf
+
+  # re-use the UserPhysicalPresent() dummy implementation from the ovmf tree
+  PlatformSecureLib|OvmfPkg/Library/PlatformSecureLib/PlatformSecureLib.inf
+!else
+  AuthVariableLib|MdeModulePkg/Library/AuthVariableLibNull/AuthVariableLibNull.inf
+!endif
+
+  BaseCryptLib|CryptoPkg/Library/BaseCryptLib/BaseCryptLib.inf
+  IntrinsicLib|CryptoPkg/Library/IntrinsicLib/IntrinsicLib.inf
+  OpensslLib|CryptoPkg/Library/OpensslLib/OpensslLib.inf
+  RngLib|MdePkg/Library/BaseRngLibTimerLib/BaseRngLibTimerLib.inf
+
+!if $(TPM_ENABLE) == TRUE
+  Tpm12DeviceLib|SecurityPkg/Library/Tpm12DeviceLibTcg/Tpm12DeviceLibTcg.inf
+  Tpm2DeviceLib|SecurityPkg/Library/Tpm2DeviceLibTcg2/Tpm2DeviceLibTcg2.inf
+!endif
 
 [LibraryClasses.common.DXE_RUNTIME_DRIVER]
   PcdLib|MdePkg/Library/DxePcdLib/DxePcdLib.inf
@@ -363,6 +475,22 @@
   VariablePolicyLib|MdeModulePkg/Library/VariablePolicyLib/VariablePolicyLibRuntimeDxe.inf
 !if $(PERFORMANCE_MEASUREMENT_ENABLE)
   PerformanceLib|MdeModulePkg/Library/DxePerformanceLib/DxePerformanceLib.inf
+!endif
+  BaseCryptLib|CryptoPkg/Library/BaseCryptLib/RuntimeCryptLib.inf
+  OpensslLib|CryptoPkg/Library/OpensslLib/OpensslLibCrypto.inf
+  IntrinsicLib|CryptoPkg/Library/IntrinsicLib/IntrinsicLib.inf
+  RngLib|MdePkg/Library/BaseRngLibTimerLib/BaseRngLibTimerLib.inf
+
+!if $(SECURE_BOOT_ENABLE) == TRUE
+  AuthVariableLib|SecurityPkg/Library/AuthVariableLib/AuthVariableLib.inf
+  SecureBootVariableLib|SecurityPkg/Library/SecureBootVariableLib/SecureBootVariableLib.inf
+  SecureBootVariableProvisionLib|SecurityPkg/Library/SecureBootVariableProvisionLib/SecureBootVariableProvisionLib.inf
+  PlatformPKProtectionLib|SecurityPkg/Library/PlatformPKProtectionLibVarPolicy/PlatformPKProtectionLibVarPolicy.inf
+
+  # re-use the UserPhysicalPresent() dummy implementation from the ovmf tree
+  PlatformSecureLib|OvmfPkg/Library/PlatformSecureLib/PlatformSecureLib.inf
+!else
+  AuthVariableLib|MdeModulePkg/Library/AuthVariableLibNull/AuthVariableLibNull.inf
 !endif
 
 [LibraryClasses.common.UEFI_DRIVER,LibraryClasses.common.UEFI_APPLICATION]
@@ -428,18 +556,19 @@
 
 [PcdsFixedAtBuild]
   gEfiMdePkgTokenSpaceGuid.PcdHardwareErrorRecordLevel|1
-  gEfiMdeModulePkgTokenSpaceGuid.PcdMaxVariableSize|0x10000
+  gEfiMdeModulePkgTokenSpaceGuid.PcdMaxVariableSize|0x8000
   gEfiMdeModulePkgTokenSpaceGuid.PcdMaxHardwareErrorVariableSize|0x8000
   gEfiMdeModulePkgTokenSpaceGuid.PcdVariableStoreSize|0x10000
 !if $(VARIABLE_SUPPORT) == "EMU"
   gEfiMdeModulePkgTokenSpaceGuid.PcdEmuVariableNvModeEnable        |TRUE
-!else
+!elseif $(VARIABLE_SUPPORT) == "SPI" || $(VARIABLE_SUPPORT) == "SMMSTORE"
   gEfiMdeModulePkgTokenSpaceGuid.PcdEmuVariableNvModeEnable        |FALSE
 !endif
-
   gEfiMdeModulePkgTokenSpaceGuid.PcdVpdBaseAddress|0x0
   gEfiMdeModulePkgTokenSpaceGuid.PcdStatusCodeUseMemory|FALSE
   gEfiMdeModulePkgTokenSpaceGuid.PcdUse1GPageTable|TRUE
+
+  gUefiCpuPkgTokenSpaceGuid.PcdFirstTimeWakeUpAPsBySipi|FALSE
 
   gEfiMdeModulePkgTokenSpaceGuid.PcdBootManagerMenuFile|{ 0x21, 0xaa, 0x2c, 0x46, 0x14, 0x76, 0x03, 0x45, 0x83, 0x6e, 0x8a, 0xb6, 0xf4, 0x66, 0x23, 0x31 }
   gUefiPayloadPkgTokenSpaceGuid.PcdPcdDriverFile|{ 0x57, 0x72, 0xcf, 0x80, 0xab, 0x87, 0xf9, 0x47, 0xa3, 0xfe, 0xD5, 0x0B, 0x76, 0xd8, 0x95, 0x41 }
@@ -454,7 +583,12 @@
 !endif
   gEfiMdeModulePkgTokenSpaceGuid.PcdSdMmcGenericTimeoutValue|$(SD_MMC_TIMEOUT)
 
+  gEfiMdeModulePkgTokenSpaceGuid.PcdSdMmcGenericTimeoutValue|$(SD_MMC_TIMEOUT)
+  gEfiMdeModulePkgTokenSpaceGuid.PcdPrioritizeInternal|$(PRIORITISE_INTERNAL)
+
   gUefiPayloadPkgTokenSpaceGuid.PcdBootManagerEscape|$(BOOT_MANAGER_ESCAPE)
+
+  gEfiMdeModulePkgTokenSpaceGuid.PcdFollowBGRTSpecification|$(FOLLOW_BGRT_SPEC)
 
   gEfiMdePkgTokenSpaceGuid.PcdMaximumUnicodeStringLength|1800000
 
@@ -481,6 +615,9 @@
   gEfiCryptoPkgTokenSpaceGuid.PcdCryptoServiceFamilyEnable.TlsGet.Family                            | PCD_CRYPTO_SERVICE_ENABLE_FAMILY
 !endif
 
+  # Disable MTRR programming
+  gUefiCpuPkgTokenSpaceGuid.PcdCpuDisableMtrrProgramming|TRUE
+
 [PcdsPatchableInModule.X64]
 !if $(NETWORK_DRIVER_ENABLE) == TRUE
   gEfiNetworkPkgTokenSpaceGuid.PcdAllowHttpConnections|TRUE
@@ -505,6 +642,11 @@
 !endif
   gEfiMdeModulePkgTokenSpaceGuid.PcdMaxSizeNonPopulateCapsule|$(MAX_SIZE_NON_POPULATE_CAPSULE)
   #
+  # Network Pcds
+  #
+!include NetworkPkg/NetworkPcds.dsc.inc
+
+  #
   # The following parameters are set by Library/PlatformHookLib
   #
   gEfiMdeModulePkgTokenSpaceGuid.PcdSerialUseMmio|FALSE
@@ -526,7 +668,6 @@
   gUefiCpuPkgTokenSpaceGuid.PcdCpuMaxLogicalProcessorNumber|$(MAX_LOGICAL_PROCESSORS)
   gUefiCpuPkgTokenSpaceGuid.PcdCpuNumberOfReservedVariableMtrrs|0
   gUefiPayloadPkgTokenSpaceGuid.PcdBootloaderParameter|0
-
 ################################################################################
 #
 # Pcd DynamicEx Section - list of all EDK II PCD Entries defined by this Platform
@@ -554,15 +695,19 @@
 !endif
   gEfiMdeModulePkgTokenSpaceGuid.PcdResetOnMemoryTypeInformationChange|FALSE
   gEfiMdeModulePkgTokenSpaceGuid.PcdEmuVariableNvStoreReserved|0
+  gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageVariableBase|0
   gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageVariableBase64|0
   gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwWorkingBase|0
   gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwSpareBase|0
   gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut|$(PLATFORM_BOOT_TIMEOUT)
-!if $(VARIABLE_SUPPORT) == "SPI"
+!if $(VARIABLE_SUPPORT) == "SPI" || $(VARIABLE_SUPPORT) == "SMMSTORE"
   gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageVariableSize  |0
   gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwWorkingSize|0
   gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwSpareSize  |0
   gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageVariableBase  |0
+  gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageVariableBase64|0
+  gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwWorkingBase64|0
+  gEfiMdeModulePkgTokenSpaceGuid.PcdFlashNvStorageFtwSpareBase64|0
 !endif
   # Disable SMM S3 script
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiS3Enable|FALSE
@@ -590,6 +735,21 @@
 
   gPcAtChipsetPkgTokenSpaceGuid.PcdRtcIndexRegister|$(RTC_INDEX_REGISTER)
   gPcAtChipsetPkgTokenSpaceGuid.PcdRtcTargetRegister|$(RTC_TARGET_REGISTER)
+
+  ## Patched by BlSupportDxe
+  gEfiSecurityPkgTokenSpaceGuid.PcdTpmInstanceGuid|{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+  gEfiSecurityPkgTokenSpaceGuid.PcdTpmInitializationPolicy|0
+  ## Match the hash algorithms listed in Tcg2Dxe
+  gEfiSecurityPkgTokenSpaceGuid.PcdTcg2HashAlgorithmBitmap|0x1F
+
+
+  gEfiSecurityPkgTokenSpaceGuid.PcdTpmPhysicalPresence|TRUE
+
+[PcdsDynamicHii]
+!if $(TPM2_ENABLE) == TRUE
+  gEfiSecurityPkgTokenSpaceGuid.PcdTcgPhysicalPresenceInterfaceVer|L"TCG2_VERSION"|gTcg2ConfigFormSetGuid|0x0|"1.3"|NV,BS
+  gEfiSecurityPkgTokenSpaceGuid.PcdTpm2AcpiTableRev|L"TCG2_VERSION"|gTcg2ConfigFormSetGuid|0x8|4|NV,BS
+!endif
 
 ################################################################################
 #
@@ -639,8 +799,23 @@
   # Components that produce the architectural protocols
   #
 !if $(SECURITY_STUB_ENABLE) == TRUE
-  MdeModulePkg/Universal/SecurityStubDxe/SecurityStubDxe.inf
+  MdeModulePkg/Universal/SecurityStubDxe/SecurityStubDxe.inf {
+    <LibraryClasses>
+!if $(SECURE_BOOT_ENABLE) == TRUE
+      NULL|SecurityPkg/Library/DxeImageVerificationLib/DxeImageVerificationLib.inf
 !endif
+!if $(TPM_ENABLE) == TRUE
+      NULL|SecurityPkg/Library/DxeTpmMeasureBootLib/DxeTpmMeasureBootLib.inf
+      NULL|SecurityPkg/Library/DxeTpm2MeasureBootLib/DxeTpm2MeasureBootLib.inf
+!endif
+  }
+!endif
+
+!if $(SECURE_BOOT_ENABLE) == TRUE
+  SecurityPkg/VariableAuthenticated/SecureBootConfigDxe/SecureBootConfigDxe.inf
+  UefiPayloadPkg/SecureBootEnrollDefaultKeys/SecureBootSetup.inf
+!endif
+
   UefiCpuPkg/CpuDxe/CpuDxe.inf
   MdeModulePkg/Universal/BdsDxe/BdsDxe.inf
 !if $(BOOTSPLASH_IMAGE)
@@ -648,9 +823,9 @@
 !endif
   MdeModulePkg/Application/UiApp/UiApp.inf {
     <LibraryClasses>
-      NULL|MdeModulePkg/Library/DeviceManagerUiLib/DeviceManagerUiLib.inf
       NULL|MdeModulePkg/Library/BootManagerUiLib/BootManagerUiLib.inf
       NULL|MdeModulePkg/Library/BootMaintenanceManagerUiLib/BootMaintenanceManagerUiLib.inf
+      NULL|MdeModulePkg/Library/DeviceManagerUiLib/DeviceManagerUiLib.inf
   }
   MdeModulePkg/Application/BootManagerMenuApp/BootManagerMenuApp.inf
 
@@ -666,8 +841,12 @@
 !endif
   PcAtChipsetPkg/PcatRealTimeClockRuntimeDxe/PcatRealTimeClockRuntimeDxe.inf
 !if $(EMU_VARIABLE_ENABLE) == TRUE
-  MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf
+  MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf {
+    <LibraryClasses>
+      NULL|MdeModulePkg/Library/VarCheckUefiLib/VarCheckUefiLib.inf
+  }
 !endif
+
   #
   # Following are the DXE drivers
   #
@@ -782,7 +961,13 @@
 !if $(DISABLE_SERIAL_TERMINAL) == FALSE
   MdeModulePkg/Universal/Console/TerminalDxe/TerminalDxe.inf
 !endif
+
+!if $(USE_PLATFORM_GOP) == TRUE
+  UefiPayloadPkg/PlatformGopPolicy/PlatformGopPolicy.inf
+!else
   UefiPayloadPkg/GraphicsOutputDxe/GraphicsOutputDxe.inf
+!endif
+
 !if $(PERFORMANCE_MEASUREMENT_ENABLE)
   MdeModulePkg/Universal/Acpi/FirmwarePerformanceDataTableDxe/FirmwarePerformanceDxe.inf
 !endif
@@ -805,6 +990,14 @@
 
 !if $(VARIABLE_SUPPORT) == "EMU"
   MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf
+!elseif $(VARIABLE_SUPPORT) == "SMMSTORE"
+  UefiPayloadPkg/SmmStoreFvb/SmmStoreFvbRuntimeDxe.inf
+  MdeModulePkg/Universal/FaultTolerantWriteDxe/FaultTolerantWriteDxe.inf
+  MdeModulePkg/Universal/Variable/RuntimeDxe/VariableRuntimeDxe.inf {
+    <LibraryClasses>
+      NULL|MdeModulePkg/Library/VarCheckUefiLib/VarCheckUefiLib.inf
+      NULL|EmbeddedPkg/Library/NvVarStoreFormattedLib/NvVarStoreFormattedLib.inf
+  }
 !elseif $(VARIABLE_SUPPORT) == "SPI"
   MdeModulePkg/Universal/Variable/RuntimeDxe/VariableSmm.inf {
     <LibraryClasses>
@@ -830,6 +1023,46 @@
   }
 !endif
 
+  #
+  # Network Support
+  #
+!include NetworkPkg/NetworkComponents.dsc.inc
+
+!if $(NETWORK_TLS_ENABLE) == TRUE
+  NetworkPkg/TlsAuthConfigDxe/TlsAuthConfigDxe.inf {
+    <LibraryClasses>
+      NULL|OvmfPkg/Library/TlsAuthConfigLib/TlsAuthConfigLib.inf
+  }
+!endif
+
+!if $(TPM_ENABLE) == TRUE
+  SecurityPkg/Tcg/Tcg2Dxe/Tcg2Dxe.inf {
+    <LibraryClasses>
+      Tpm2DeviceLib|SecurityPkg/Library/Tpm2DeviceLibRouter/Tpm2DeviceLibRouterDxe.inf
+      NULL|SecurityPkg/Library/Tpm2DeviceLibDTpm/Tpm2InstanceLibDTpm.inf
+      HashLib|SecurityPkg/Library/HashLibBaseCryptoRouter/HashLibBaseCryptoRouterDxe.inf
+      NULL|SecurityPkg/Library/HashInstanceLibSha1/HashInstanceLibSha1.inf
+      NULL|SecurityPkg/Library/HashInstanceLibSha256/HashInstanceLibSha256.inf
+      NULL|SecurityPkg/Library/HashInstanceLibSha384/HashInstanceLibSha384.inf
+      NULL|SecurityPkg/Library/HashInstanceLibSha512/HashInstanceLibSha512.inf
+      NULL|SecurityPkg/Library/HashInstanceLibSm3/HashInstanceLibSm3.inf
+  }
+  SecurityPkg/Tcg/Tcg2Config/Tcg2ConfigDxe.inf {
+    <LibraryClasses>
+#    Tpm2DeviceLib|SecurityPkg/Library/Tpm2DeviceLibRouter/Tpm2DeviceLibRouterDxe.inf //Modif H.E Avoid Hang Tcg2config
+    Tpm2DeviceLib|SecurityPkg/Library/Tpm2DeviceLibTcg2/Tpm2DeviceLibTcg2.inf
+  }
+  SecurityPkg/Tcg/TcgDxe/TcgDxe.inf {
+    <LibraryClasses>
+      Tpm12DeviceLib|SecurityPkg/Library/Tpm12DeviceLibDTpm/Tpm12DeviceLibDTpm.inf
+  }
+   SecurityPkg/Tcg/TcgConfigDxe/TcgConfigDxe.inf {
+    <LibraryClasses>
+    Tpm12DeviceLib|SecurityPkg/Library/Tpm12DeviceLibTcg/Tpm12DeviceLibTcg.inf
+  }
+
+!endif
+
   #------------------------------
   #  Build the shell
   #------------------------------
@@ -844,7 +1077,6 @@
   DevicePathLib|MdePkg/Library/UefiDevicePathLib/UefiDevicePathLib.inf
   FileHandleLib|MdePkg/Library/UefiFileHandleLib/UefiFileHandleLib.inf
   ShellLib|ShellPkg/Library/UefiShellLib/UefiShellLib.inf
-  !include NetworkPkg/NetworkLibs.dsc.inc
 
 [Components.X64]
   ShellPkg/DynamicCommand/TftpDynamicCommand/TftpDynamicCommand.inf {
